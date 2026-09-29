@@ -1,0 +1,19 @@
+[project]
+name = "rag-against-the-machine"
+version = "0.1.0"
+description = "Retrieval-Augmented Generation system for codebase question answering"
+requires-python = ">=3.10"
+dependencies = [
+    "pydantic",
+    "fire",
+    "tqdm",
+    "rank-bm25",
+    "transformers",
+    "torch",
+]
+
+[dependency-groups]
+dev = [
+    "flake8",
+    "mypy",
+]

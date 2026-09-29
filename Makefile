@@ -1,8 +1,6 @@
 install:
 	uv sync
 
-all: run
-
 run:
 	uv run python -m src
 
