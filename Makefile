@@ -5,7 +5,7 @@ run:
 	uv run python -m src
 
 debug:
-	uv run python pdg -m src
+	uv run python pdb -m src
 
 clean:
 	rm -rf .mypy_cache .DS_Store
@@ -25,4 +25,4 @@ lint-strict:
 	uv run flake8 .
 	uv run mypy . --strict
 
-.PHONY: install all run debug clean lint lint-strict
+.PHONY: install run debug clean lint lint-strict

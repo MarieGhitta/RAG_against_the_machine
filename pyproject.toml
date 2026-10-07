@@ -16,4 +16,8 @@ dependencies = [
 dev = [
     "flake8",
     "mypy",
+    "pytest",
 ]
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]
