@@ -87,3 +87,34 @@ def test_invalid_python():
     )
 
     assert chunks == []
+
+def test_chunk_python_unicode():
+    content = '''def hello():
+    message = "café été"
+    print(message)
+
+def goodbye():
+    print("goodbye")
+'''
+
+    chunks = chunk_python(content, "test.py", 2000)
+
+    assert len(chunks) == 2
+
+    for chunk in chunks:
+        assert content[
+            chunk.first_character_index:chunk.last_character_index
+        ] == chunk.text
+
+def test_chunk_text_too_large():
+    content = "A" * 250
+
+    chunks = chunk_text(content, "test.md", 100)
+
+    assert len(chunks) == 3
+
+    for chunk in chunks:
+        assert len(chunk.text) <= 100
+        assert content[
+            chunk.first_character_index:chunk.last_character_index
+        ] == chunk.text
