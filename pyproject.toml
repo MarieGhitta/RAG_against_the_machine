@@ -10,6 +10,7 @@ dependencies = [
     "rank-bm25",
     "transformers",
     "torch",
+    "accelerate>=1.15.0",
 ]
 
 [dependency-groups]

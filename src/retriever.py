@@ -2,6 +2,7 @@ import json
 from pathlib import Path
 from src.models import Chunk
 from rank_bm25 import BM25Okapi
+import re
 
 
 def _convert_json_in_chunks(datas: list[dict[str, object]]) -> list[Chunk]:
@@ -26,26 +27,26 @@ class Retriever:
     def __init__(self, index_path: str | Path):
         self.chunks = _load_chunks(index_path)
         self.words_list = self._tokenized_chunk()
-        self.bm25 = BM25Okapi(self.words_list)
+        self.bm25 = BM25Okapi(self.words_list) if self.words_list else None
 
     def _tokenized_chunk(self) -> list[list[str]]:
         words_list = []
         for chunk in self.chunks:
-            words_list.append(chunk.text.lower().split())
+            tokens = re.findall(r"\w+", chunk.text.lower())
+            words_list.append(tokens)
         return words_list
-
 
     def search(self, query: str, k: int = 5) -> list[Chunk]:
         """Return the k most relevant chunks for a query."""
-        if not query.strip() or k <= 0 or not self.chunks:
+        if not query.strip() or k <= 0 or not self.chunks or self.bm25 is None:
             return []
-        query_tokens = query.lower().split()
+        query_tokens = re.findall(r"\w+", query.lower())
         scores = self.bm25.get_scores(query_tokens)
         ranked_indices = sorted(
             range(len(scores)),
             key=lambda i: scores[i],
             reverse=True)
-        return [
-            self.chunks[i] for i in ranked_indices[:min(k, len(self.chunks))]
-            ]
-
+        results = []
+        for i in ranked_indices[:min(k, len(self.chunks))]:
+            results.append(self.chunks[i])
+        return results

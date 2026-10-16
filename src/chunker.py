@@ -52,6 +52,26 @@ def _create_chunks(
     return chunks
 
 
+def _node_range(node: ast.AST,
+                line_pos_char: list[int]) -> tuple[int, int]:
+    """Return the character range of an AST node."""
+    start = line_pos_char[node.lineno - 1] + node.col_offset
+    end = line_pos_char[node.end_lineno - 1] + node.end_col_offset
+    return start, end
+
+
+def _class_ranges(node: ast.ClassDef,
+                  line_pos_char: list[int]
+                  ) -> list[tuple[int, int]]:
+    """Split a class into ranges based on ites direct members."""
+    ranges = []
+    for member in node.body:
+        if not hasattr(node, "lineno"):
+            continue
+        ranges.append(_node_range(member, line_pos_char))
+    return ranges
+
+
 def chunk_python(
         content: str,
         file_path: str,
@@ -70,9 +90,10 @@ def chunk_python(
     for node in tree.body:
         if not hasattr(node, "lineno"):
             continue
-        start = line_pos_char[node.lineno - 1] + node.col_offset
-        end = line_pos_char[node.end_lineno - 1] + node.end_col_offset
-        ranges.append((start, end))
+        if isinstance(node, ast.ClassDef):
+            ranges.extend(_class_ranges(node, line_pos_char))
+        else:
+            ranges.append(_node_range(node, line_pos_char))
     return _create_chunks(
         content,
         file_path,
