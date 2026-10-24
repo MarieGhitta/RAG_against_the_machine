@@ -62,7 +62,7 @@ def _read_sources(sources: list[MinimalSource]) -> list[str]:
 
 
 class CLI:
-    """Expose the RAG system through command-line operations."""
+    """Command-line interface for the RAG."""
 
     def index(self,
               max_chunk_size: int = 2000,
@@ -126,4 +126,107 @@ class CLI:
              OSError,
              ValueError,
              json.JSONDecodeError) as error:
+            print(f"Error: {error}")
+
+    def answer(self,
+               query: str,
+               k: int = 5,
+               index_path: str = str(DEFAULT_INDEX_PATH),
+               model_name: str = DEFAULT_MODEL_NAME) -> None:
+        """Generate an answer for a single question."""
+        if not query.strip():
+            print("Error: query cannot be empty.")
+        if k <= 0:
+            print("Error: k must be greater than 0.")
+            return
+        try:
+            pipeline = Pipeline(index_path, model_name)
+            answer, chunks = pipeline.answer(query, k)
+            print(answer)
+            print(f"\n{len(chunks)} sources retrieved")
+            for chunk in chunks:
+                print(
+                    f"- {chunk.file_path}: "
+                    f"{chunk.first_character_index}-"
+                    f"{chunk.last_character_index}")
+        except (OSError, ValueError, json.JSONDecodeError) as error:
+            print(f"Error: { error}")
+
+    def answer_dataset(self,
+                       student_search_results_path: str,
+                       save_directory: str = ("data/output/"
+                                              "search_results_and_answer"),
+                       model_name: str = DEFAULT_MODEL_NAME) -> None:
+        """Generate answers using previously retrieved source locations."""
+        try:
+            data = StudentSearchResults.model_validate(
+                _load_json(student_search_results_path))
+            generator_pipeline = None
+            results = []
+            for item in tqdm(
+                 data.search_results,
+                 desc="Generating answers",
+                 unit="questions"):
+                source_texts = _read_sources(item.retrieved_sources)
+                if generator_pipeline is None:
+                    generator_pipeline = Pipeline.__new__(Pipeline)
+                    from src.generator import Generator
+                    generator_pipeline.generator = Generator(model_name)
+                chunks = [Chunk(text=text,
+                                file_path=source.file_path,
+                                first_character_index=source.first_character_index,
+                                last_character_index=source.last_character_index)
+                          for source, text in zip(
+                            item.retrieved_sources, source_texts)]
+                answer = generator_pipeline.generator.generate(
+                    item.question, chunks)
+                results.append(
+                    MinimalAnswer(
+                        question_id=item.question_id,
+                        question=item.question,
+                        retrieved_sources=item.retrieved_sources,
+                        answer=answer))
+            output = StudentSearchResultsAndAnswer(
+                search_results=results,
+                k=data.k)
+            destination = _output_path(
+                student_search_results_path, save_directory)
+            _save_json(output.model_dump(), destination)
+            print(f"Saved answers to {destination}")
+        except (OSError, ValueError, json.JSONDecodeError) as error:
+            print(f"Error: {error}")
+
+    def evaluate(self,
+                 student_search_results_path: str,
+                 dataset_path: str) -> None:
+        """Calculate recall at k against a ground-truth dataset."""
+        try:
+            student = StudentSearchResults.model_validate(
+                _load_json(student_search_results_path))
+            dataset = RagDataset.model_validate(_load_json(dataset_path))
+            ground_truth = {
+                question.question_id: question
+                for question in dataset.rag_questions
+                if hasattr(question, "sources")}
+            recalls = []
+            for result in student.search_results:
+                reference = ground_truth.get(result.question_id)
+                if reference is None or not reference.sources:
+                    continue
+                found = 0
+                for expected in reference.sources:
+                    for retrieved in result.retrieved_sources:
+                        if (expected.file_path == retrieved.file_path
+                            and max(expected.first_character_index,
+                                    retrieved.first_character_index)
+                            < min(expected.last_character_index,
+                                  retrieved.last_character_index)):
+                            found += 1
+                            break
+                recalls.append(found / len(reference.sources))
+            if not recalls:
+                print("No matching ground-truth quastions to evaluate")
+                return
+            print(f"Recall@{student.k}: {sum(recalls) / len(recalls):.3f}")
+        except (OSError, ValueError, json.JSONDecodeError) as error:
             print(f"Error: {error}")
