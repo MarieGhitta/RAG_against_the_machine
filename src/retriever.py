@@ -21,6 +21,26 @@ def _load_chunks(index_path: str | Path) -> list[Chunk]:
     return _convert_json_in_chunks(data)
 
 
+def _tokenize(text: str) -> list[str]:
+    """Tokenize text while preserving technical identifiers."""
+    tokens = re.findall(
+        r"[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*|\d+",
+        text)
+    result = []
+    for token in tokens:
+        result.append(token.lower())
+        parts = re.split(r"[_.]+", token)
+        for part in parts:
+            subtokens = re.findall(
+                r"[A-Z]+(?=[A-Z][a-z]|\d|$)|"
+                r"[A-Z]?[a-z]+|[A-Z]+|\d+",
+                part)
+            result.extend(subtoken.lower()
+                          for subtoken in subtokens
+                          if subtoken.lower() != token.lower())
+    return result
+
+
 class Retriever:
     """Seach relevant chunks unsing BM25."""
 
@@ -32,7 +52,7 @@ class Retriever:
     def _tokenized_chunk(self) -> list[list[str]]:
         words_list = []
         for chunk in self.chunks:
-            tokens = re.findall(r"\w+", chunk.text.lower())
+            tokens = _tokenize(chunk.text)
             words_list.append(tokens)
         return words_list
 
@@ -40,7 +60,7 @@ class Retriever:
         """Return the k most relevant chunks for a query."""
         if not query.strip() or k <= 0 or not self.chunks or self.bm25 is None:
             return []
-        query_tokens = re.findall(r"\w+", query.lower())
+        query_tokens = _tokenize(query)
         scores = self.bm25.get_scores(query_tokens)
         ranked_indices = sorted(
             range(len(scores)),

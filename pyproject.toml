@@ -11,6 +11,7 @@ dependencies = [
     "transformers",
     "torch",
     "accelerate>=1.15.0",
+    "nltk>=3.10.4",
 ]
 
 [dependency-groups]

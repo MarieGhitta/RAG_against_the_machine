@@ -13,7 +13,8 @@ def _line_pos_char(content: str) -> list[int]:
 def _split_text(
         text: str,
         start: int,
-        max_chunk_size: int) -> list[tuple[str, int, int]]:
+        max_chunk_size: int,
+        overlap: int = 0) -> list[tuple[str, int, int]]:
     """Split text into chunks of at most max_chunk_size characters."""
     chunks = []
     for position in range(0, len(text), max_chunk_size):
