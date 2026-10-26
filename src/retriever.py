@@ -3,6 +3,11 @@ from pathlib import Path
 from src.models import Chunk
 from rank_bm25 import BM25Okapi
 import re
+from nltk.tokenize import word_tokenize
+from nltk.stem import PorterStemmer
+from nltk.corpus import stopwords
+import nltk
+
 
 
 def _convert_json_in_chunks(datas: list[dict[str, object]]) -> list[Chunk]:
@@ -27,7 +32,14 @@ class Retriever:
     def __init__(self, index_path: str | Path):
         self.chunks = _load_chunks(index_path)
         self.words_list = self._tokenized_chunk()
-        self.bm25 = BM25Okapi(self.words_list) if self.words_list else None
+        self.bm25 = BM25Okapi(self.tokenized_corpus) if self.tokenized_corpus else None
+        self.tokenized_corpus = [self._preprocess(self.words_list) for word in self.words_list]
+
+    nltk.download('punkt')
+    stemmer = PorterStemmer()
+    def _preprocess(self):
+        tokens = word_tokenize(self)
+        return [stemmer.stem(token) for token in tokens]
 
     def _tokenized_chunk(self) -> list[list[str]]:
         words_list = []
