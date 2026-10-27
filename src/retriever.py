@@ -47,11 +47,8 @@ class Retriever:
     def __init__(self, index_path: str | Path):
         self.chunks = _load_chunks(index_path)
         self.words_list = self._tokenized_chunk()
-        self.bm25 = BM25Okapi(
-                                self.words_list,
-                                k1=1.5,
-                                b=0.5,
-                            ) if self.words_list else None
+        self.bm25 = BM25Okapi(self.words_list, k1=2, b=0.5
+                             ) if self.words_list else None
 
     def _tokenized_chunk(self) -> list[list[str]]:
         words_list = []

@@ -87,7 +87,12 @@ class CLI:
             chunks = retriever.search(query, k)
             results = [_source_from_chunk(chunk).model_dump()
                        for chunk in chunks]
-            print(json.dumps(results, ensure_ascii=False, indent=2))
+            print(f"\n{len(chunks)} sources retrieved:")
+            for chunk in chunks:
+                print(
+                    f"- {chunk.file_path} "
+                    f"[{chunk.first_character_index}:"
+                    f"{chunk.last_character_index}]")
         except (OSError, ValueError, json.JSONDecodeError) as error:
             print(f"Error: {error}")
 
@@ -143,12 +148,6 @@ class CLI:
             pipeline = Pipeline(index_path, model_name)
             answer, chunks = pipeline.answer(query, k)
             print(answer)
-            print(f"\n{len(chunks)} sources retrieved")
-            for chunk in chunks:
-                print(
-                    f"- {chunk.file_path}: "
-                    f"{chunk.first_character_index}-"
-                    f"{chunk.last_character_index}")
         except (OSError, ValueError, json.JSONDecodeError) as error:
             print(f"Error: { error}")
 
