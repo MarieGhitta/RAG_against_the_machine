@@ -85,8 +85,8 @@ class CLI:
         try:
             retriever = Retriever(index_path)
             chunks = retriever.search(query, k)
-            results = [_source_from_chunk(chunk).model_dump()
-                       for chunk in chunks]
+            # results = [_source_from_chunk(chunk).model_dump()
+            #            for chunk in chunks]
             print(f"\n{len(chunks)} sources retrieved:")
             for chunk in chunks:
                 print(
@@ -104,7 +104,7 @@ class CLI:
         """Search every question in a dataset and save the results."""
         if k <= 0:
             print("Error: k must be greater than 0.")
-            return 
+            return
         try:
             dataset = RagDataset.model_validate(_load_json(dataset_path))
             retriever = Retriever(index_path)
@@ -171,12 +171,13 @@ class CLI:
                     generator_pipeline = Pipeline.__new__(Pipeline)
                     from src.generator import Generator
                     generator_pipeline.generator = Generator(model_name)
-                chunks = [Chunk(text=text,
-                                file_path=source.file_path,
-                                first_character_index=source.first_character_index,
-                                last_character_index=source.last_character_index)
-                          for source, text in zip(
-                            item.retrieved_sources, source_texts)]
+                chunks = [
+                    Chunk(text=text,
+                          file_path=source.file_path,
+                          first_character_index=source.first_character_index,
+                          last_character_index=source.last_character_index)
+                    for source, text in zip(
+                        item.retrieved_sources, source_texts)]
                 answer = generator_pipeline.generator.generate(
                     item.question, chunks)
                 results.append(

@@ -148,4 +148,3 @@ def chunk_text(
         file_path,
         ranges,
         max_chunk_size)
-

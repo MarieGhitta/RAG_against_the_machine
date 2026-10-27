@@ -48,7 +48,7 @@ class Retriever:
         self.chunks = _load_chunks(index_path)
         self.words_list = self._tokenized_chunk()
         self.bm25 = BM25Okapi(self.words_list, k1=2, b=0.5
-                             ) if self.words_list else None
+                              ) if self.words_list else None
 
     def _tokenized_chunk(self) -> list[list[str]]:
         words_list = []
