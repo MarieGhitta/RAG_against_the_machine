@@ -54,6 +54,8 @@ class Retriever:
         words_list = []
         for chunk in self.chunks:
             tokens = _tokenize(chunk.text)
+            path_tokens = _tokenize(chunk.file_path)
+            tokens.extend(path_tokens * 4)
             words_list.append(tokens)
         return words_list
 
