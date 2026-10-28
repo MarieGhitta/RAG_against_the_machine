@@ -55,7 +55,20 @@ def _create_chunks(
 def _node_range(node: ast.AST,
                 line_pos_char: list[int]) -> tuple[int, int]:
     """Return the character range of an AST node."""
+    if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef,
+                             ast.ClassDef, ast.Assign, ast.AnnAssign,
+                             ast.Expr, ast.Import, ast.ImportFrom,
+                             ast.For, ast.AsyncFor, ast.If, ast.While,
+                             ast.With, ast.AsyncWith, ast.Try, ast.Return,
+                             ast.Raise, ast.Assert, ast.Delete,
+                             ast.Global, ast.Nonlocal, ast.Pass,
+                             ast.Break, ast.Continue)):
+        raise ValueError("Unsupported AST node type")
+    if node.end_lineno is None:
+        raise ValueError("AST node has no end_lineno")
     start = line_pos_char[node.lineno - 1] + node.col_offset
+    if node.end_lineno is None or node.end_col_offset is None:
+        raise ValueError("AST node has no end position")
     end = line_pos_char[node.end_lineno - 1] + node.end_col_offset
     return start, end
 
@@ -66,7 +79,7 @@ def _class_ranges(node: ast.ClassDef,
     """Split a class into ranges based on ites direct members."""
     ranges = []
     for member in node.body:
-        if not hasattr(node, "lineno"):
+        if not hasattr(member, "lineno"):
             continue
         ranges.append(_node_range(member, line_pos_char))
     return ranges

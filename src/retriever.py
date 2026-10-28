@@ -66,7 +66,7 @@ def _markdown_headings(file_path: str) -> list[tuple[int, int, str]]:
 def _active_headings_context(headings: list[tuple[int, int, str]],
                              character_index: int) -> str:
     """Return the Markdown heading hierarchy at a character offset."""
-    active = []
+    active: list[tuple[int, str]] = []
     for line_char_pos, level, title in headings:
         if line_char_pos > character_index:
             break
