@@ -41,6 +41,40 @@ def _tokenize(text: str) -> list[str]:
     return result
 
 
+def _markdown_headings(file_path: str) -> list[tuple[int, int, str]]:
+    """Return md headings with their character line position and levels."""
+    path = Path(file_path)
+    if path.suffix.lower() != ".md" or not path.is_file():
+        return []
+    try:
+        content = path.read_text(encoding="utf-8", errors="ignore")
+    except OSError:
+        return []
+    headings = []
+    line_char_pos = 0
+    for line in content.splitlines(keepends=True):
+        match = re.match(
+            r"^\s{0,3}(#{1,6})\s+(.+?)\s*#*\s*(?:\r?\n)?$",
+            line)
+        if match:
+            headings.append(
+                (line_char_pos, len(match.group(1)), match.group(2).strip()))
+        line_char_pos += len(line)
+    return headings
+
+
+def _active_headings_context(headings: list[tuple[int, int, str]],
+                             character_index: int) -> str:
+    """Return the Markdown heading hierarchy at a character offset."""
+    active = []
+    for line_char_pos, level, title in headings:
+        if line_char_pos > character_index:
+            break
+        active = [item for item in active if item[0] < level]
+        active.append((level, title))
+    return " ".join(title for _, title in active)
+
+
 class Retriever:
     """Seach relevant chunks unsing BM25."""
 
@@ -52,10 +86,20 @@ class Retriever:
 
     def _tokenized_chunk(self) -> list[list[str]]:
         words_list = []
+        headings_cache = {}
         for chunk in self.chunks:
             tokens = _tokenize(chunk.text)
             path_tokens = _tokenize(chunk.file_path)
             tokens.extend(path_tokens * 4)
+            if (chunk.file_path.lower().endswith(".md")
+               and "/docs/" in chunk.file_path):
+                if chunk.file_path not in headings_cache:
+                    headings_cache[chunk.file_path] = _markdown_headings(
+                        chunk.file_path)
+                context = _active_headings_context(
+                    headings_cache[chunk.file_path],
+                    chunk.first_character_index)
+                tokens.extend(_tokenize(context) * 2)
             words_list.append(tokens)
         return words_list
 
