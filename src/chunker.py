@@ -52,18 +52,11 @@ def _create_chunks(
     return chunks
 
 
-def _node_range(node: ast.AST,
+def _node_range(node: ast.FunctionDef |
+                ast.AsyncFunctionDef |
+                ast.ClassDef | ast.stmt,
                 line_pos_char: list[int]) -> tuple[int, int]:
     """Return the character range of an AST node."""
-    if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef,
-                             ast.ClassDef, ast.Assign, ast.AnnAssign,
-                             ast.Expr, ast.Import, ast.ImportFrom,
-                             ast.For, ast.AsyncFor, ast.If, ast.While,
-                             ast.With, ast.AsyncWith, ast.Try, ast.Return,
-                             ast.Raise, ast.Assert, ast.Delete,
-                             ast.Global, ast.Nonlocal, ast.Pass,
-                             ast.Break, ast.Continue)):
-        raise ValueError("Unsupported AST node type")
     if node.end_lineno is None:
         raise ValueError("AST node has no end_lineno")
     start = line_pos_char[node.lineno - 1] + node.col_offset
