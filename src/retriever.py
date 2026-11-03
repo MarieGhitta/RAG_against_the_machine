@@ -88,9 +88,10 @@ class Retriever:
         words_list = []
         headings_cache = {}
         for chunk in self.chunks:
-            tokens = _tokenize(chunk.text)
+            tokens = _tokenize(
+                        f"{chunk.context} {chunk.text}")
             path_tokens = _tokenize(chunk.file_path)
-            tokens.extend(path_tokens * 4)
+            tokens.extend(path_tokens * 3)
             if (chunk.file_path.lower().endswith(".md")
                and "/docs/" in chunk.file_path):
                 if chunk.file_path not in headings_cache:
@@ -99,7 +100,7 @@ class Retriever:
                 context = _active_headings_context(
                     headings_cache[chunk.file_path],
                     chunk.first_character_index)
-                tokens.extend(_tokenize(context) * 2)
+                tokens.extend(_tokenize(context) * 3)
             words_list.append(tokens)
         return words_list
 

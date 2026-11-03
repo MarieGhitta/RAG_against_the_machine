@@ -28,10 +28,11 @@ def _split_text(
 def _create_chunks(
         content: str,
         file_path: str,
-        ranges: list[tuple[int, int]],
+        ranges: list[tuple[int, int, str]],
         max_chunk_size: int) -> list[Chunk]:
+    """Create chunks from character ranges and their context."""
     chunks = []
-    for start, end in ranges:
+    for start, end, context in ranges:
         text = content[start:end]
         if len(text) <= max_chunk_size:
             chunks.append(
@@ -39,7 +40,8 @@ def _create_chunks(
                     text=text,
                     file_path=file_path,
                     first_character_index=start,
-                    last_character_index=end))
+                    last_character_index=end,
+                    context=context))
         else:
             for chunk_text, chunk_start, chunk_end in _split_text(
                     text, start, max_chunk_size):
@@ -48,7 +50,8 @@ def _create_chunks(
                         text=chunk_text,
                         file_path=file_path,
                         first_character_index=chunk_start,
-                        last_character_index=chunk_end))
+                        last_character_index=chunk_end,
+                        context=context))
     return chunks
 
 
@@ -68,13 +71,15 @@ def _node_range(node: ast.FunctionDef |
 
 def _class_ranges(node: ast.ClassDef,
                   line_pos_char: list[int]
-                  ) -> list[tuple[int, int]]:
+                  ) -> list[tuple[int, int, str]]:
     """Split a class into ranges based on ites direct members."""
-    ranges = []
+    ranges: list[tuple[int, int, str]] = []
+    context = f"class {node.name}"
     for member in node.body:
         if not hasattr(member, "lineno"):
             continue
-        ranges.append(_node_range(member, line_pos_char))
+        start, end = _node_range(member, line_pos_char)
+        ranges.append((start, end, context))
     return ranges
 
 
@@ -92,14 +97,15 @@ def chunk_python(
     except SyntaxError:
         return []
     line_pos_char = _line_pos_char(content)
-    ranges = []
+    ranges: list[tuple[int, int, str]] = []
     for node in tree.body:
         if not hasattr(node, "lineno"):
             continue
         if isinstance(node, ast.ClassDef):
             ranges.extend(_class_ranges(node, line_pos_char))
         else:
-            ranges.append(_node_range(node, line_pos_char))
+            start, end = _node_range(node, line_pos_char)
+            ranges.append((start, end, ""))
     return _create_chunks(
         content,
         file_path,
@@ -147,8 +153,10 @@ def chunk_text(
         return []
     if max_chunk_size <= 0:
         raise ValueError("max_chunk_size must be greater than 0.")
-    ranges = _text_blocks(content)
-    ranges = _merge_blocks(ranges, max_chunk_size)
+    text_ranges = _text_blocks(content)
+    merged_ranges = _merge_blocks(text_ranges, max_chunk_size)
+    ranges: list[tuple[int, int, str]] = [(start, end, "")
+                                          for start, end in merged_ranges]
     return _create_chunks(
         content,
         file_path,

@@ -5,7 +5,7 @@ run:
 	uv run python -m src
 
 debug:
-	uv run python pdb -m src
+	uv run python -m pdb -m src
 
 clean:
 	rm -rf .mypy_cache .DS_Store
