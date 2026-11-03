@@ -6,7 +6,9 @@ from typing import cast, Any
 
 
 class Generator:
+    """Generate answers from retrieved context using a language model."""
     def __init__(self, model_name: str):
+        """Initialize the tokenizer and language model."""
         self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.model = AutoModelForCausalLM.from_pretrained(
                         model_name,
@@ -14,16 +16,18 @@ class Generator:
                         device_map="auto")
 
     def generate(self, query: str, chunks: list[Chunk]) -> str:
+        """Generate an answer using the retrieved chunks as context."""
         if not chunks:
             return "Insufficient context to answer the question."
         context = "\n\n".join(chunk.text for chunk in chunks)
         messages = [{
             "role": "system",
             "content": (
-                "Answer the question using only the provided context."
-                "If the context is insufficient, say so."
-                "Do not repeat the answer."
-                "Do not repeat the answer. /no_think"
+                "Answer the question using only the provided context.\n"
+                "If the context is insufficient, say so clearly.\n"
+                "Do not invent information or use external knowledge.\n"
+                "Be concise and answer the question directly.\n"
+                "/no_think"
             )},
             {
             "role": "user",
@@ -34,7 +38,8 @@ class Generator:
                         tokenize=True,
                         add_generation_prompt=True,
                         return_tensors="pt",
-                        return_dict=True))
+                        return_dict=True,
+                        enable_thinking=False))
         inputs = inputs.to(self.model.device)
         model = cast(Any, self.model)
         outputs = model.generate(**inputs,
@@ -48,4 +53,7 @@ class Generator:
             answer = " ".join(decoded)
         else:
             answer = decoded
-        return answer.strip()
+        answer = answer.strip()
+        if "</think>" in answer:
+            answer = answer.split("</think>", 1)[-1].strip()
+        return answer

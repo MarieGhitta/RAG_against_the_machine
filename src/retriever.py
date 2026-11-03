@@ -109,9 +109,16 @@ class Retriever:
         if not query.strip() or k <= 0 or not self.chunks or self.bm25 is None:
             return []
         query_tokens = _tokenize(query)
+        if not query_tokens:
+            return []
+        query_terms = set(query_tokens)
+        candidates = [i for i, tokens in enumerate(self.words_list)
+                      if query_terms.intersection(tokens)]
+        if not candidates:
+            return []
         scores = self.bm25.get_scores(query_tokens)
         ranked_indices = sorted(
-            range(len(scores)),
+            candidates,
             key=lambda i: scores[i],
             reverse=True)
         results = []

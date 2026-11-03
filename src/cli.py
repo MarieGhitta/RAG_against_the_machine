@@ -55,6 +55,10 @@ def _read_sources(sources: list[MinimalSource]) -> list[str]:
         path = Path(source.file_path)
         with path.open("r", encoding="utf-8") as file:
             content = file.read()
+            if (not 0 <= source.first_character_index
+               <= source.last_character_index <= len(content)):
+                raise ValueError(
+                    f"Invalid source range for {source.file_path}")
         texts.append(
             content[
                 source.first_character_index:
@@ -96,7 +100,7 @@ class CLI:
                k: int = 5,
                index_path: str = str(DEFAULT_INDEX_PATH)) -> None:
         """Search for the most relevant source chunks."""
-        if not query.strip():
+        if not query or not query.strip():
             print("Error: query cannot be empty.")
             return
         if k <= 0:
@@ -238,7 +242,7 @@ class CLI:
                             break
                 recalls.append(found / len(reference.sources))
             if not recalls:
-                print("No matching ground-truth quastions to evaluate")
+                print("No matching ground-truth questions to evaluate")
                 return
             print(f"Recall@{student.k}: {sum(recalls) / len(recalls):.3f}")
         except (OSError, ValueError, json.JSONDecodeError) as error:
