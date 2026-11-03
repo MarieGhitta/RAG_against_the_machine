@@ -12,6 +12,7 @@ from src.models import (
     Chunk)
 from src.pipeline import Pipeline
 from src.retriever import Retriever
+from src.generator import Generator
 
 
 DEFAULT_INDEX_PATH = "data/processed/index.json"
@@ -59,6 +60,25 @@ def _read_sources(sources: list[MinimalSource]) -> list[str]:
                 source.first_character_index:
                 source.last_character_index])
     return texts
+
+
+def _source_iou(expected: MinimalSource,
+                retrieved: MinimalSource) -> float:
+    """Calculate the intersection over union of two source ranges."""
+    if expected.file_path != retrieved.file_path:
+        return 0.0
+    intersection = max(0,
+                       min(expected.last_character_index,
+                           retrieved.last_character_index)
+                       - max(expected.first_character_index,
+                             retrieved.first_character_index))
+    union = (max(expected.last_character_index,
+                 retrieved.last_character_index)
+             - min(expected.first_character_index,
+                   retrieved.first_character_index))
+    if union <= 0:
+        return 0.0
+    return intersection / union
 
 
 class CLI:
@@ -141,6 +161,7 @@ class CLI:
         """Generate an answer for a single question."""
         if not query.strip():
             print("Error: query cannot be empty.")
+            return
         if k <= 0:
             print("Error: k must be greater than 0.")
             return
@@ -160,17 +181,13 @@ class CLI:
         try:
             data = StudentSearchResults.model_validate(
                 _load_json(student_search_results_path))
-            generator_pipeline = None
+            generator = Generator(model_name)
             results = []
             for item in tqdm(
                  data.search_results,
                  desc="Generating answers",
                  unit="questions"):
                 source_texts = _read_sources(item.retrieved_sources)
-                if generator_pipeline is None:
-                    generator_pipeline = Pipeline.__new__(Pipeline)
-                    from src.generator import Generator
-                    generator_pipeline.generator = Generator(model_name)
                 chunks = [
                     Chunk(text=text,
                           file_path=source.file_path,
@@ -178,7 +195,7 @@ class CLI:
                           last_character_index=source.last_character_index)
                     for source, text in zip(
                         item.retrieved_sources, source_texts)]
-                answer = generator_pipeline.generator.generate(
+                answer = generator.generate(
                     item.question, chunks)
                 results.append(
                     MinimalAnswer(
@@ -216,11 +233,7 @@ class CLI:
                 found = 0
                 for expected in reference.sources:
                     for retrieved in result.retrieved_sources:
-                        if (expected.file_path == retrieved.file_path
-                            and max(expected.first_character_index,
-                                    retrieved.first_character_index)
-                            < min(expected.last_character_index,
-                                  retrieved.last_character_index)):
+                        if _source_iou(expected, retrieved) >= 0.05:
                             found += 1
                             break
                 recalls.append(found / len(reference.sources))
