@@ -109,8 +109,6 @@ class CLI:
         try:
             retriever = Retriever(index_path)
             chunks = retriever.search(query, k)
-            # results = [_source_from_chunk(chunk).model_dump()
-            #            for chunk in chunks]
             print(f"\n{len(chunks)} sources retrieved:")
             for chunk in chunks:
                 print(

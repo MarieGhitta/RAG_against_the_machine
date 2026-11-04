@@ -1,201 +1,301 @@
+*This project has been created as part of the 42 curriculum by mghitta.*
+
 # RAG Against the Machine
 
-A Retrieval-Augmented Generation (RAG) system for answering questions about a codebase. It indexes source files, retrieves relevant snippets with BM25, and uses a small local language model to generate answers grounded in the retrieved context.
+## Description
 
-## How it works
+RAG Against the Machine is a Retrieval-Augmented Generation (RAG) system
+for answering questions about the vLLM codebase. It indexes source
+files, retrieves relevant snippets using BM25, and uses the local
+`Qwen/Qwen3-0.6B` language model to generate answers grounded in the
+retrieved context.
 
-The pipeline has four stages:
+The goal is to locate the source-code or documentation passages that
+answer a question, then provide a concise answer based on those
+passages.
 
-1. **Indexing** — reads supported files from `data/raw`, splits them into chunks, and saves a JSON index.
-2. **Retrieval** — ranks chunks for a question using BM25 lexical search.
-3. **Generation** — sends the retrieved context and question to `Qwen/Qwen3-0.6B` to generate an answer.
-4. **Evaluation** — compares retrieved source locations with the reference sources and reports `Recall@k`.
+### System architecture
+
+The pipeline consists of four stages:
+
+1.  **Indexing** --- reads supported files from `data/raw/`, splits
+    their contents into chunks, and saves the resulting index under
+    `data/processed/`.
+2.  **Retrieval** --- tokenizes a question and the indexed chunks, then
+    ranks candidate chunks using BM25.
+3.  **Generation** --- sends the retrieved context and the question to
+    `Qwen/Qwen3-0.6B`, which generates an answer based on that context.
+4.  **Evaluation** --- compares retrieved source locations with
+    reference source locations and reports `Recall@k`.
 
 ### Main components
 
-- `src/chunker.py` — splits Python files using their AST structure and Markdown/text files using paragraph blocks.
-- `src/indexer.py` — scans the corpus and writes the index.
-- `src/retriever.py` — tokenizes queries and chunks, then ranks chunks with BM25. Technical identifiers are preserved, and Markdown headings and file paths can contribute to retrieval.
-- `src/generator.py` — loads the tokenizer and language model and generates an answer from the retrieved context.
-- `src/pipeline.py` — connects retrieval and generation.
-- `src/models.py` — defines the Pydantic models used to validate chunks, datasets, sources, and output.
-- `src/cli.py` — exposes the command-line operations.
+-   `src/chunker.py` --- splits Python files using their AST structure
+    and Markdown/text files using paragraph blocks.
+-   `src/indexer.py` --- scans the corpus, creates chunks, and writes
+    the index.
+-   `src/retriever.py` --- tokenizes queries and chunks, then ranks
+    chunks with BM25. Technical identifiers are preserved, and Markdown
+    headings and file paths can contribute to retrieval.
+-   `src/generator.py` --- loads the tokenizer and language model and
+    generates an answer from the retrieved context.
+-   `src/pipeline.py` --- connects retrieval and generation.
+-   `src/models.py` --- defines the Pydantic models used to validate
+    chunks, datasets, sources, and outputs.
+-   `src/cli.py` --- exposes the command-line interface.
 
-## Requirements
+### Chunking strategy
 
-- Python **3.10 or later**
-- [`uv`](https://docs.astral.sh/uv/)
-- Enough memory and disk space to load the `Qwen/Qwen3-0.6B` model and its dependencies. The model is downloaded on first use.
+Python files and documentation are segmented differently:
 
-Dependencies are declared in `pyproject.toml`. They include Pydantic, Python Fire, tqdm, rank-bm25, Transformers, PyTorch, Accelerate, and NLTK. Development dependencies include Flake8, mypy, and pytest.
+-   **Python files:** the parser uses Python's AST to identify code
+    structures and their source ranges.
+-   **Markdown and text files:** content is split into paragraph-based
+    blocks.
 
-## Installation
+Chunks are limited to 2,000 characters by default. The maximum chunk
+size can be configured when indexing. Character offsets are stored with
+each chunk so that retrieved sources can be traced back to their
+original locations.
 
-From the project root:
+### Retrieval method
 
-```bash
+The retrieval stage uses **BM25**, a lexical ranking method. Text is
+tokenized before indexing and querying. Technical identifiers are
+preserved, while Markdown headings and file paths can contribute to
+matching. The retriever returns the top `k` source chunks for each
+question.
+
+### Design decisions
+
+-   **BM25:** provides a lexical retrieval baseline without requiring a
+    separate embedding model.
+-   **Different chunking strategies:** Python syntax has a structure
+    that can be identified with the AST, while documentation is more
+    naturally segmented into text blocks.
+-   **Source offsets:** storing character positions makes it possible to
+    return exact locations in the original corpus and compare them with
+    reference sources.
+-   **Local generation model:** `Qwen/Qwen3-0.6B` is used to generate
+    answers from retrieved context.
+
+### Challenges and solutions
+
+-   **Different source formats:** Python code and Markdown      documentation require different segmentation strategies, so separate chunking approaches are used.
+-   **Character offsets in Python AST:** AST column offsets are
+    expressed in UTF-8 bytes. They must be converted to character
+    offsets to keep source positions consistent with the character-index
+    format expected by the project.
+-   **Retrieval vocabulary:** questions may use different wording from the source code. Preserving technical identifiers and including
+    headings and file paths in retrieval text helps match both
+    natural-language descriptions and code terminology.
+-   **Grounded generation:** the generator is instructed to answer using the retrieved context and to state when the context is insufficient.
+-  **improving scoring:** at first I add quite bad scoring, I have to find solutions to improve the retrieval. 
+    - I had to switch the good balance between the k (Controls how much term frequency influences the document score.) and d(Controls the degree of document length normalization.) parameters.
+    - adding signature functions, markdown title and file path when tokenising.
+
+## Instructions
+
+### Requirements
+
+-   Python **3.10 or later**
+-   [`uv`](https://docs.astral.sh/uv/)
+-   Enough memory and disk space to install the dependencies and load
+    `Qwen/Qwen3-0.6B`. The model is downloaded from Hugging Face on
+    first use.
+
+Dependencies are declared in `pyproject.toml`. They include Pydantic,
+Python Fire, tqdm, rank-bm25, Transformers, PyTorch, Accelerate, and
+NLTK. Development dependencies include Flake8, mypy, and pytest.
+
+### Installation
+
+Run these commands from the repository root:
+
+``` bash
 uv sync
 ```
 
-This creates the project environment and installs the declared dependencies.
+### Prepare the corpus
 
-## Prepare the corpus
-
-Place the codebase to index inside `data/raw/`. By default, the indexer scans this directory recursively.
+Place the vLLM repository inside `data/raw/`. The indexer scans this
+directory recursively.
 
 Supported extensions include:
 
-- Python: `.py`, `.pyi`
-- Text and configuration: `.md`, `.txt`, `.json`, `.yaml`, `.yml`, `.toml`, `.cmake`, `.sh`
-- C/C++ and CUDA: `.c`, `.h`, `.cpp`, `.hpp`, `.cu`, `.cuh`
+-   Python: `.py`, `.pyi`
+-   Text and configuration: `.md`, `.txt`, `.json`, `.yaml`, `.yml`,
+    `.toml`, `.cmake`, `.sh`
+-   C/C++ and CUDA: `.c`, `.h`, `.cpp`, `.hpp`, `.cu`, `.cuh`
 
-The default maximum chunk size is **2,000 characters**. The indexer does not accept a value above this limit.
+The default maximum chunk size is **2,000 characters**. The indexer does
+not accept a value above this limit.
 
-## Usage
+### Example usage
 
-Run commands from the project root. The CLI is built with Python Fire, so methods of the `CLI` class are exposed as commands.
+Run commands from the project root. The CLI is built with Python Fire
+and is invoked with `uv run python -m src <command>`.
 
-### 1. Build the index
+#### 1. Build the index
 
-```bash
-uv run python -m src index
+``` bash
+uv run python -m src index --max_chunk_size 2000
 ```
 
-With custom options:
+The default index is saved to `data/processed/index.json`. You can
+override the input and output paths using the available CLI options.
 
-```bash
-uv run python -m src index --max_chunk_size=2000 --raw_dir=data/raw --output_path=data/processed/index.json
+#### 2. Search for one question
+
+``` bash
+uv run python -m src search "How does the scheduler work?" --k 5
 ```
 
-The default index path is `data/processed/index.json`.
+The command prints the retrieved source locations, including each file
+path and character range.
 
-### 2. Search for relevant snippets
+#### 3. Generate an answer for one question
 
-Search the index for one question:
-
-```bash
-uv run python -m src search --query="How does the scheduler work?" --k=5
+``` bash
+uv run python -m src answer "How does the scheduler work?" --k 5
 ```
 
-The command prints the retrieved source locations, including each file path and character range.
+By default, the pipeline uses the index at `data/processed/index.json`
+and the model `Qwen/Qwen3-0.6B`. The `--index_path` and `--model_name`
+options can be used to override these defaults.
 
-### 3. Generate an answer
+#### 4. Search a dataset of questions
 
-```bash
-uv run python -m src answer --query="How does the scheduler work?" --k=5
+The dataset must follow the project's Pydantic dataset structure and
+contain a `rag_questions` list.
+
+``` bash
+uv run python -m src search_dataset \
+  --dataset_path data/datasets/UnansweredQuestions/dataset_docs_public.json \
+  --k 5 \
+  --save_directory data/output/search_results/UnansweredQuestions
 ```
 
-By default, the pipeline uses:
+Search results are written as a `StudentSearchResults` JSON file. Keep
+the output directory scoped by dataset (`UnansweredQuestions` or
+`AnsweredQuestions`) to avoid overwriting results from another dataset.
 
-- Index: `data/processed/index.json`
-- Model: `Qwen/Qwen3-0.6B`
+#### 5. Evaluate retrieval results
 
-You can provide `--index_path` or `--model_name` to override these defaults.
-
-### 4. Search a dataset of questions
-
-The dataset should follow the project’s Pydantic dataset structure, with a `rag_questions` list. Search results are saved as JSON under `data/output/search_results/` by default.
-
-```bash
-uv run python -m src search_dataset --dataset_path=data/datasets/public/AnsweredQuestions/dataset_docs_public.json --k=5
+``` bash
+uv run python -m src evaluate \
+  --student_search_results_path data/output/search_results/UnansweredQuestions/dataset_docs_public.json \
+  --dataset_path data/datasets/AnsweredQuestions/dataset_docs_public.json
 ```
 
-To evaluate the retrieval results against a reference dataset:
+The evaluator reports `Recall@k` against a reference dataset. A
+retrieved source matches a reference source when the file paths are
+identical and their character ranges have an intersection-over-union
+(IoU) of at least 0.05.
 
-```bash
-uv run python -m src evaluate --student_search_results_path=data/output/search_results/dataset_docs_public.json --dataset_path=data/datasets/public/AnsweredQuestions/dataset_docs_public.json
+#### 6. Generate answers for a dataset
+
+This command consumes previously generated search results, reads the
+corresponding source ranges, generates answers, and writes a
+`StudentSearchResultsAndAnswer` JSON file.
+
+``` bash
+uv run python -m src answer_dataset \
+  --student_search_results_path data/output/search_results/UnansweredQuestions/dataset_docs_public.json \
+  --save_directory data/output/search_results_and_answer/UnansweredQuestions
 ```
 
-The evaluator reports `Recall@k`. Reference and retrieved sources are considered a match when their file paths are identical and their character ranges overlap.
-
-### 5. Generate answers for a dataset
-
-This command consumes previously generated search results, reads the corresponding source ranges, generates answers, and writes the results to JSON.
-
-```bash
-uv run python -m src answer_dataset --student_search_results_path=data/output/search_results/dataset_docs_public.json
-```
-
-Generated results are saved under `data/output/search_results_and_answer/` by default.
-
-> **Note:** The dataset paths above are examples. Adjust them to match the dataset files available in your checkout. Run commands from the repository root so that relative paths resolve correctly.
-
-## Makefile commands
+### Makefile commands
 
 The project includes these convenience targets:
 
-| Command | Purpose |
-| --- | --- |
-| `make install` | Install dependencies with `uv sync` |
-| `make run` | Run the CLI |
-| `make debug` | Run the CLI through Python's debugger (see note below) |
-| `make clean` | Remove Python cache directories and mypy cache |
-| `make lint` | Run Flake8 and mypy with the project's required flags |
-| `make lint-strict` | Run Flake8 and mypy in strict mode |
+  Command              Purpose
+  -------------------- -------------------------------------------------------
+  `make install`       Install dependencies with `uv sync`
+  `make run`           Run the CLI
+  `make debug`         Run the CLI through Python's debugger
+  `make clean`         Remove Python cache directories and mypy cache
+  `make lint`          Run Flake8 and mypy with the project's required flags
+  `make lint-strict`   Run Flake8 and mypy in strict mode
 
-Use:
+Run the checks with:
 
-```bash
+``` bash
 make install
 make run
 make lint
 ```
 
-## Evaluation
+## Performance analysis
 
-The retrieval metric is **Recall@k**: it measures how much of the reference source evidence is recovered among the top `k` retrieved snippets. The project specification sets these minimum targets on the reference datasets:
+The project specification sets these minimum retrieval targets on the
+reference datasets:
 
-- **Documentation questions:** at least 80% Recall@5
-- **Code questions:** at least 50% Recall@5
+-   **Documentation questions:** at least 80% Recall@5
+-   **Code questions:** at least 50% Recall@5
 
-Run evaluation separately for documentation and code datasets, using the matching reference dataset for each set of search results. Scores depend on the corpus, chunking strategy, retrieval configuration, and value of `k`.
+The latest local evaluation results are:
 
-## Output and data formats
+  Dataset           Questions evaluated    Recall@5   Required threshold
+  --------------- --------------------- ----------- --------------------
+  Documentation                     100   **85.0%**                  80%
+  Code                               99   **73.7%**                  50%
 
-Search operations write a JSON object containing:
+These are local evaluation results; the official evaluation during the
+defense is performed by the provided Moulinette executable.
 
-- `search_results`
-- `k`
+A local run of `search_dataset` over 100 documentation questions took
+approximately 21 seconds in the tested environment. Execution time may
+vary depending on the machine and environment.
 
-Each search result includes the question ID, question text, and a list of retrieved sources. A source contains:
+## Output formats
 
-- `file_path`
-- `first_character_index`
-- `last_character_index`
+Search operations write a JSON object conforming to the
+`StudentSearchResults` model. It contains:
 
-Answer operations additionally include the generated `answer`.
+-   `search_results`
+-   `k`
 
-File paths and character offsets must correspond to the indexed corpus. Keep the corpus paths stable between indexing and evaluation.
+Each search result includes the question ID, question text, and a list
+of retrieved sources. Each source contains:
 
-## Development checks
+-   `file_path`
+-   `first_character_index`
+-   `last_character_index`
 
-Run the configured checks with:
+Answer operations additionally include the generated `answer` and
+conform to the `StudentSearchResultsAndAnswer` model.
 
-```bash
-make lint
-```
+File paths and character offsets must correspond to the indexed corpus.
+Keep the corpus paths stable between indexing and evaluation.
 
-Run tests with:
+## Resources
 
-```bash
-uv run pytest
-```
+### References
 
-## Limitations
+-   *Qwen:* 
+    https://huggingface.co/Qwen/Qwen3-0.6B
+-   *BM25:*
+    https://dataaspirant.com/blog/bm25-explained/
+-   *Python AST:* 
+    https://docs.python.org/3/library/ast.html
+    https://earthly.dev/blog/python-ast/
+-   *Pydantic:*
+    https://docs.pydantic.dev/
+-   *Pipeline:*
+    https://huggingface.co/docs/transformers/en/pipeline_tutorial
+-   *Rag:*
+    https://huggingface.co/blog/ngxson/make-your-own-rag
 
-- Retrieval uses lexical BM25 matching; questions that use very different wording from the source may be harder to match.
-- The generated answer is limited by the retrieved context and the capabilities of the small local model. It can be incomplete or incorrect, so answers should be checked against the source code.
-- The model may need to be downloaded the first time generation is run.
+### Use of AI
 
-## Project goal
+AI tools were used as supplementary assistance during the project. They
+helped with understanding concepts and documentation related to RAG,
+BM25, Python AST parsing, and language-model generation; exploring and
+reviewing chunking and retrieval approaches; investigating errors and
+debugging; reviewing code and type-checking issues; and improving the
+project documentation.
 
-This project demonstrates an end-to-end RAG workflow for codebase question answering: indexing a repository, retrieving evidence, generating a context-grounded response, and evaluating retrieval quality with Recall@k.
-
-# Ressouces:
-
-## Web resources: 
-- https://huggingface.co/Qwen/Qwen3-0.6B
-- https://dataaspirant.com/blog/bm25-explained/
-
-## AI ressources:
-AI was used throughout the project to supplement various documentation and sources, to help understand the many concepts related to this project. AI was also used to conduct code reviews and to provide ideas for breaking through certain impasses. 
+AI-generated suggestions were reviewed, tested, and adapted as part of
+the implementation. The project code and design choices remain the
+responsibility of the author.
