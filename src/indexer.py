@@ -62,7 +62,10 @@ def index_corpus(raw_dir: str | Path = "data/raw",
         raise ValueError(
             "The source directory must be inside the project root."
             ) from error
-
+    if not raw_path.exists():
+        raise FileExistsError(
+            f"Source directory not found: {raw_path}"
+        )
     if not raw_path.is_dir():
         raise NotADirectoryError(
             f"Source directory does not exist: {raw_path}"

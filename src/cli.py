@@ -93,7 +93,10 @@ class CLI:
               raw_dir: str = "data/raw",
               output_path: str = "data/processed/index.json") -> None:
         """Index the source corpus."""
-        index_corpus(raw_dir, output_path, max_chunk_size)
+        try:
+            index_corpus(raw_dir, output_path, max_chunk_size)
+        except (OSError, ValueError) as error:
+            print(f"Error: {error}")
 
     def search(self,
                query: str,
