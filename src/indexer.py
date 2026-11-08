@@ -3,6 +3,7 @@ from pathlib import Path
 from tqdm import tqdm
 from src.chunker import chunk_python, chunk_text
 from src.models import Chunk
+from src.retriever import save_bm25_cache
 
 PYTHON_EXTENSIONS = {".py", ".pyi"}
 
@@ -99,7 +100,9 @@ def index_corpus(raw_dir: str | Path = "data/raw",
         raise OSError(
             f"Could not save index to {destination}: {error}"
         ) from error
+    cache_path = save_bm25_cache(chunks, destination)
     print(f"Indexed {len(chunks)} chunks from {indexed_files} files.")
     print(f"Skipped {skipped_files} files out of {len(files)} candidates.")
     print(f"Index saved to {destination}")
+    print(f"BM25 cache saved to {cache_path}")
     return len(chunks)

@@ -10,9 +10,7 @@ from src.models import (
     StudentSearchResults,
     StudentSearchResultsAndAnswer,
     Chunk)
-from src.pipeline import Pipeline
 from src.retriever import Retriever
-from src.generator import Generator
 
 
 DEFAULT_INDEX_PATH = "data/processed/index.json"
@@ -171,6 +169,7 @@ class CLI:
             print("Error: k must be greater than 0.")
             return
         try:
+            from src.pipeline import Pipeline
             pipeline = Pipeline(index_path, model_name)
             answer, chunks = pipeline.answer(query, k)
             print(answer)
@@ -184,6 +183,7 @@ class CLI:
                        model_name: str = DEFAULT_MODEL_NAME) -> None:
         """Generate answers using previously retrieved source locations."""
         try:
+            from src.generator import Generator
             data = StudentSearchResults.model_validate(
                 _load_json(student_search_results_path))
             generator = Generator(model_name)
