@@ -10,7 +10,7 @@ from src.models import Chunk
 
 
 CACHE_VERSION = 1
-DEFAULT_K1 = 2.0
+DEFAULT_K1 = 0.5
 DEFAULT_B = 0.5
 BM25_EPSILON = 0.25
 
