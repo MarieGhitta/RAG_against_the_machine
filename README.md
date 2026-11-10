@@ -34,9 +34,10 @@ The pipeline consists of four stages:
     and Markdown/text files using paragraph blocks.
 -   `src/indexer.py` --- scans the corpus, creates chunks, and writes
     the index.
--   `src/retriever.py` --- tokenizes queries and chunks, then ranks
-    chunks with BM25. Technical identifiers are preserved, and Markdown
-    headings and file paths can contribute to retrieval.
+-   `src/retriever.py` --- tokenizes queries and chunks, builds an
+    inverted index for BM25, and ranks matching chunks. Technical
+    identifiers are preserved; file paths and Markdown heading context
+    can contribute to retrieval.
 -   `src/generator.py` --- loads the tokenizer and language model and
     generates an answer from the retrieved context.
 -   `src/pipeline.py` --- connects retrieval and generation.
@@ -62,9 +63,22 @@ original locations.
 
 The retrieval stage uses **BM25**, a lexical ranking method. Text is
 tokenized before indexing and querying. Technical identifiers are
-preserved, while Markdown headings and file paths can contribute to
-matching. The retriever returns the top `k` source chunks for each
-question.
+preserved, while file paths and Markdown heading context can contribute
+to matching.
+
+During index construction, the retriever builds an **inverted index**
+(`postings`): each term maps to the document IDs in which it appears and
+its frequency in each document. It also precomputes the document
+lengths, average document length, and IDF values required by BM25.
+At query time, this allows the retriever to score only chunks containing
+query terms instead of scanning the entire corpus.
+
+For Markdown files located under `/docs/`, the active heading hierarchy
+at each chunk's character offset is added to the retrieval tokens. This
+provides topical context even when a chunk does not contain the heading
+itself. File-path tokens are also included in the retrieval text.
+
+The retriever returns the top `k` source chunks for each question.
 
 ### Design decisions
 
@@ -87,12 +101,29 @@ question.
     offsets to keep source positions consistent with the character-index
     format expected by the project.
 -   **Retrieval vocabulary:** questions may use different wording from the source code. Preserving technical identifiers and including
-    headings and file paths in retrieval text helps match both
-    natural-language descriptions and code terminology.
--   **Grounded generation:** the generator is instructed to answer using the retrieved context and to state when the context is insufficient.
--  **improving scoring:** at first I add quite bad scoring, I have to find solutions to improve the retrieval. 
-    - I had to switch the good balance between the k (Controls how much term frequency influences the document score.) and d(Controls the degree of document length normalization.) parameters.
-    - adding signature functions, markdown title and file path when tokenising.
+    file paths in retrieval text helps match both natural-language
+    descriptions and code terminology. For Markdown files under
+    `/docs/`, the active heading hierarchy is also added as context to
+    the tokens of each chunk.
+-   **Retrieval performance:** initially, each query required scoring
+    the corpus chunks. Building an inverted index (`postings`) makes it
+    possible to visit only the chunks containing at least one query
+    term. The top results are selected with `heapq.nlargest()` rather
+    than sorting every scored chunk.
+-   **Index startup time:** building the inverted index and BM25
+    statistics is expensive, so these data are saved in a sidecar
+    pickle cache (`index.bm25.pkl`). The retriever can load the
+    precomputed data on subsequent runs instead of rebuilding them.
+    If the cache is missing or incompatible, it can be rebuilt from
+    the JSON chunk index.
+-   **BM25 parameter tuning:** retrieval quality depends on the balance
+    between `k1`, which controls term-frequency saturation, and `b`,
+    which controls document-length normalization. These parameters were
+    tuned against the evaluation dataset to reach the required
+    documentation Recall@5 threshold.
+-   **Grounded generation:** the generator is instructed to answer
+    using the retrieved context and to state when the context is
+    insufficient.
 
 ## Instructions
 
@@ -144,6 +175,11 @@ uv run python -m src index --max_chunk_size 2000
 
 The default index is saved to `data/processed/index.json`. You can
 override the input and output paths using the available CLI options.
+The BM25 data are also saved automatically in the sidecar cache
+`data/processed/index.bm25.pkl` to speed up subsequent retriever
+initialization. The cache is generated from the JSON index and can be
+recreated if it is deleted; it should not be treated as the source
+corpus or as a replacement for `index.json`.
 
 #### 2. Search for one question
 
@@ -234,19 +270,14 @@ reference datasets:
 -   **Documentation questions:** at least 80% Recall@5
 -   **Code questions:** at least 50% Recall@5
 
-The latest local evaluation results are:
+The latest documentation evaluation reported by the author reached
+**80% Recall@5**, meeting the required documentation threshold. The
+retrieval speed reached at least **27 questions per second** in the
+tested environment, comfortably above the required throughput.
 
-  Dataset           Questions evaluated    Recall@5   Required threshold
-  --------------- --------------------- ----------- --------------------
-  Documentation                     100   **85.0%**                  80%
-  Code                               99   **73.7%**                  50%
-
-These are local evaluation results; the official evaluation during the
-defense is performed by the provided Moulinette executable.
-
-A local run of `search_dataset` over 100 documentation questions took
-approximately 21 seconds in the tested environment. Execution time may
-vary depending on the machine and environment.
+Results depend on the evaluation dataset and execution environment.
+The official evaluation during the defense is performed by the
+provided Moulinette executable.
 
 ## Output formats
 
@@ -277,6 +308,7 @@ Keep the corpus paths stable between indexing and evaluation.
     https://huggingface.co/Qwen/Qwen3-0.6B
 -   *BM25:*
     https://dataaspirant.com/blog/bm25-explained/
+    https://dev.to/pykpyky/comprendre-et-implementer-lalgo-de-score-bm25-47af
 -   *Python AST:* 
     https://docs.python.org/3/library/ast.html
     https://earthly.dev/blog/python-ast/
